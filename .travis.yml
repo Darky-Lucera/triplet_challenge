@@ -11,6 +11,7 @@ addons:
   apt:
     sources:
       # Include here any new source that you may need to install a package
+      - ubuntu-toolchain-r-test # remove if not using g++ for C++
     packages:
       # Include the specific packages that you need
       - g++-8
