@@ -13,10 +13,13 @@ addons:
       # Include here any new source that you may need to install a package
     packages:
       # Include the specific packages that you need
+      - g++-8
 
 # Modify the script lines to compile and program
 script:
   # Take a look at https://github.com/pamarcos/triplet_challenge/blob/cpp/.travis.yml to see a full example of a C++ build
+  - export CXX=g++-8
+  - $CXX --version
   - make
   - wget https://raw.githubusercontent.com/pamarcos/triplet_challenge/master/check_result.sh -O check_result.sh
   - bash check_result.sh
