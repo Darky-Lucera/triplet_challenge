@@ -7,6 +7,13 @@
 #include <string>
 #include "allocator.h"
 
+#if !defined(_WIN32)
+    #include <sys/mman.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+#endif
+
 //-------------------------------------
 #define kUseUnorderedMap
 //#define kUsePreProcess
@@ -100,7 +107,7 @@ struct StringEqual {
 
 //-------------------------------------
 struct StringHash {
-    inline uint32_t operator()(const String &str) const {
+    inline size_t operator()(const String &str) const {
         return str.hash;
     }
 };
@@ -110,7 +117,7 @@ struct StringHash {
     #if defined(kUsePMR)
         using Map = std::pmr::unordered_map<String, int, StringHash, StringEqual>;
     #elif defined(kUseMemPool)
-        using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, int>::value_type>;
+        using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, int, StringHash, StringEqual>::value_type>;
         using Map = std::unordered_map<String, int, StringHash, StringEqual, CustomAllocatorPair>;
     #else
         using Map = std::unordered_map<String, int, StringHash, StringEqual>;
@@ -119,7 +126,7 @@ struct StringHash {
     #if defined(kUsePMR)
         using Map = std::pmr::map<String, int, StringLess>;
     #elif defined(kUseMemPool)
-        using CustomAllocatorPair = CustomAllocator<std::map<String, int>::value_type>;
+        using CustomAllocatorPair = CustomAllocator<std::map<String, int, StringLess>::value_type>;
         using Map = std::map<String, int, StringLess, CustomAllocatorPair>;
     #else
         using Map = std::map<String, int, StringLess>;
@@ -260,7 +267,6 @@ PreprocessBuffer(uint8_t *buffer, size_t size) {
 //-------------------------------------
 int
 main(int argc, char *argv[]) {
-    FILE    *pf = nullptr;
     size_t  size;
     uint8_t *buffer;
 
@@ -270,6 +276,9 @@ main(int argc, char *argv[]) {
         fprintf(stderr, "Use: %s file.txt\n", argv[0]);
         return -1;
     }
+
+#if defined(_WIN32)
+    FILE    *pf = nullptr;
 
     pf = fopen(argv[1], "rb");
     if (pf == nullptr) {
@@ -282,6 +291,24 @@ main(int argc, char *argv[]) {
     buffer = (uint8_t *) malloc(size + 1);
     fread(buffer, size, 1, pf);
     fclose(pf);
+#else
+    int fd = open(argv[1], O_RDONLY);
+    if (fd == -1) {
+        fprintf(stderr, "Can't open file '%s'\n", argv[1]);
+        return -1;
+    }
+
+    // Get the size
+    struct stat sb;
+    if (fstat(fd, &sb) == -1) {
+        fprintf(stderr, "Can't get stat of file '%s'\n", argv[1]);
+        return -1;
+    }
+
+    // map the whole file into virtual memory. Let's delegate the implementation of reading in chunks to the OS
+    buffer = (uint8_t *) mmap(NULL, sb.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    size   = sb.st_size;
+#endif
 
     kTick(readTime);
 
@@ -407,6 +434,14 @@ main(int argc, char *argv[]) {
             max3 = p;
         }
     }
+
+#if !defined(_WIN32)
+    if (fd != -1)
+        close(fd);
+
+    if (buffer != MAP_FAILED)
+        munmap(buffer, sb.st_size);
+#endif
 
     kTick(process);
 
