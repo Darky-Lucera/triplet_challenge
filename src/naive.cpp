@@ -55,36 +55,46 @@ TimeDiff(time_point now, time_point past) {
 
 //-------------------------------------
 struct String {
-    uint8_t             *word;
+    static uint8_t *    buffer;
     union {
         uint64_t        lenHash;
         struct {
             uint32_t    hash;
-            uint32_t    length;
+            uint32_t    length : 8;
+            uint32_t    offset : 24;
         };
     };
+
+    inline uint8_t *    word() const noexcept { return buffer + offset; }
 };
+uint8_t *    String::buffer {};
 
 //-------------------------------------
 struct StringLess {
     inline bool operator()(const String &a, const String &b) const {
-        if (a.lenHash < b.lenHash)
+        uint64_t aLenHash = a.lenHash & 0xffffffffff;
+        uint64_t bLenHash = b.lenHash & 0xffffffffff;
+
+        if (aLenHash < bLenHash)
             return true;
 
-        if (a.lenHash > b.lenHash)
+        if (aLenHash > bLenHash)
             return false;
 
-        return memcmp(a.word, b.word, a.length) < 0;
+        return memcmp(a.buffer + a.offset, b.buffer + b.offset, a.length) < 0;
     }
 };
 
 //-------------------------------------
 struct StringEqual {
     inline bool operator()(const String &a, const String &b) const {
-        if (a.lenHash != b.lenHash)
+        uint64_t aLenHash = a.lenHash & 0xffffffffff;
+        uint64_t bLenHash = b.lenHash & 0xffffffffff;
+
+        if (aLenHash != bLenHash)
             return false;
 
-        return memcmp(a.word, b.word, a.length) == 0;
+        return memcmp(a.buffer + a.offset, b.buffer + b.offset, a.length) == 0;
     }
 };
 
@@ -94,6 +104,27 @@ struct StringHash {
         return str.hash;
     }
 };
+
+//-------------------------------------
+#if defined(kUseUnorderedMap)
+    #if defined(kUsePMR)
+        using Map = std::pmr::unordered_map<String, int, StringHash, StringEqual>;
+    #elif defined(kUseMemPool)
+        using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, int>::value_type>;
+        using Map = std::unordered_map<String, int, StringHash, StringEqual, CustomAllocatorPair>;
+    #else
+        using Map = std::unordered_map<String, int, StringHash, StringEqual>;
+    #endif
+#else
+    #if defined(kUsePMR)
+        using Map = std::pmr::map<String, int, StringLess>;
+    #elif defined(kUseMemPool)
+        using CustomAllocatorPair = CustomAllocator<std::map<String, int>::value_type>;
+        using Map = std::map<String, int, StringLess, CustomAllocatorPair>;
+    #else
+        using Map = std::map<String, int, StringLess>;
+    #endif
+#endif
 
 //-------------------------------------
 string
@@ -121,12 +152,10 @@ Expand(const uint8_t *str) {
 //-------------------------------------
 string
 Expand(const String &str) {
-    string aux((const char *)str.word, str.length);
+    string aux((const char *)str.buffer + str.offset, str.length);
 
     return aux;
 }
-
-std::unordered_map<uint32_t, uint32_t> hashes;
 
 // http://www.orthogonal.com.au/computers/hashstrings/
 //-------------------------------------
@@ -259,28 +288,16 @@ main(int argc, char *argv[]) {
 #if defined(kUsePMR)
     std::pmr::monotonic_buffer_resource mbr;
 #elif defined(kUseMemPool)
-    using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, int>::value_type>;
-
-    CustomPool          pool(1024 * 1024 * 16);
+    CustomPool          pool(1024 * 1024 * 13);
     CustomAllocatorPair ator(&pool);
 #endif
 
-#if defined(kUseUnorderedMap)
-    #if defined(kUsePMR)
-        std::pmr::unordered_map<String, int, StringHash, StringEqual> words(&mbr);
-    #elif defined(kUseMemPool)
-        std::unordered_map<String, int, StringHash, StringEqual, CustomAllocatorPair> words(ator);
-    #else
-        std::unordered_map<String, int, StringHash, StringEqual> words;
-    #endif
+#if defined(kUsePMR)
+    Map words(&mbr);
+#elif defined(kUseMemPool)
+    Map words(ator);
 #else
-    #if defined(kUsePMR)
-        std::pmr::map<String, int, StringLess> words(&mbr);
-    #elif defined(kUseMemPool)
-        std::map<String, int, StringLess, CustomAllocatorPair> words(ator);
-    #else
-        std::map<String, int, StringLess> words;
-    #endif
+    Map words;
 #endif
 
 #if defined(kUsePreProcess)
@@ -296,10 +313,12 @@ main(int argc, char *argv[]) {
     kTick(preprocess);
 
     const uint8_t * const end = buffer + size;
-    String      triplet{ buffer, 0 };   // 157858 triplets
+    String      triplet { };            // 157858 triplets
     size_t      wordCount = 0;          // 212199 words
     size_t      wordPosCount = 0;
     uint32_t    wordPos[2]{};
+
+    triplet.buffer = buffer;
 
     // Get the two first words
     while (buffer < end && wordPosCount < 2) {
@@ -316,11 +335,11 @@ main(int argc, char *argv[]) {
 #else
         uint8_t c = gLUT[*buffer];
         if (c != 0) {
-            triplet.word[triplet.length++] = c;
+            triplet.word()[triplet.length++] = c;
             ++buffer;
         }
         else {
-            triplet.word[triplet.length++] = ' ';
+            triplet.word()[triplet.length++] = ' ';
             ++wordCount;
             wordPos[wordPosCount++] = triplet.length;
             while (buffer < end && gLUT[*buffer] == 0) {
@@ -329,7 +348,7 @@ main(int argc, char *argv[]) {
         }
 #endif
     }
-    uint32_t minLen = 12345, maxLen = 0;
+
     // Get triplets
     while(buffer < end) {
 #if defined(kUsePreProcess)
@@ -340,15 +359,11 @@ main(int argc, char *argv[]) {
 #else
         uint8_t c = gLUT[*buffer];
         if (c != 0) {
-            triplet.word[triplet.length++] = c;
+            triplet.word()[triplet.length++] = c;
             ++buffer;
         }
         else {
-            if(minLen > triplet.length)
-                minLen = triplet.length;
-            if (maxLen < triplet.length)
-                maxLen = triplet.length;
-            triplet.word[triplet.length] = ' ';
+            triplet.word()[triplet.length] = ' ';
             while (buffer < end && gLUT[*buffer] == 0) {
                 ++buffer;
             }
@@ -356,7 +371,7 @@ main(int argc, char *argv[]) {
             ++wordCount;
             //printf("%s\n", Expand(triplet).c_str());
 
-            triplet.hash = fnvHash32((uint8_t *) triplet.word, triplet.length);
+            triplet.hash = fnvHash32((uint8_t *) triplet.word(), triplet.length);
             auto it = words.find(triplet);
             if (it == words.end()) {
                 words.emplace(triplet, 1);
@@ -365,7 +380,7 @@ main(int argc, char *argv[]) {
                 ++it->second;
             }
 
-            triplet.word += wordPos[0];
+            triplet.offset += wordPos[0];
             uint32_t w0 = wordPos[1] - wordPos[0];
             uint32_t w1 = triplet.length - wordPos[0] + 1;
             triplet.length -= wordPos[0] - 1;
@@ -403,10 +418,10 @@ main(int argc, char *argv[]) {
     printf("Triplet Count: %lld\n", words.size());
 #endif
 
-    max1.first.word[max1.first.length] = 0;
-    max2.first.word[max2.first.length] = 0;
-    max3.first.word[max3.first.length] = 0;
-    printf("%s - %d\n%s - %d\n%s - %d\n", max1.first.word, max1.second, max2.first.word, max2.second, max3.first.word, max3.second);
+    max1.first.word()[max1.first.length] = 0;
+    max2.first.word()[max2.first.length] = 0;
+    max3.first.word()[max3.first.length] = 0;
+    printf("%s - %d\n%s - %d\n%s - %d\n", max1.first.word(), max1.second, max2.first.word(), max2.second, max3.first.word(), max3.second);
 
     return 0;
 }
