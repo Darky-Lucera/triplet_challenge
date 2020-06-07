@@ -7,19 +7,21 @@
 #include <string>
 #include "allocator.h"
 
-#if !defined(_WIN32)
-    #include <sys/mman.h>
-    #include <sys/stat.h>
-    #include <fcntl.h>
-    #include <unistd.h>
-#endif
-
 //-------------------------------------
 #define kUseUnorderedMap
 //#define kUsePreProcess
 //#define kUsePMR
 #define kUseMemPool
 //#define kShowTime
+//#define kUseMMap
+
+//-------------------------------------
+#if defined(kUseMMap) && !defined(_WIN32)
+    #include <sys/mman.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+#endif
 
 //-------------------------------------
 #if defined(kUsePMR)
@@ -277,7 +279,7 @@ main(int argc, char *argv[]) {
         return -1;
     }
 
-#if defined(_WIN32)
+#if defined(_WIN32) || !defined(kUseMMap)
     FILE    *pf = nullptr;
 
     pf = fopen(argv[1], "rb");
@@ -435,7 +437,7 @@ main(int argc, char *argv[]) {
         }
     }
 
-#if !defined(_WIN32)
+#if defined(kUseMMap) && !defined(_WIN32)
     if (fd != -1)
         close(fd);
 
