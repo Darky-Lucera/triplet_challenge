@@ -117,21 +117,21 @@ struct StringHash {
 //-------------------------------------
 #if defined(kUseUnorderedMap)
     #if defined(kUsePMR)
-        using Map = std::pmr::unordered_map<String, int, StringHash, StringEqual>;
+        using Map = std::pmr::unordered_map<String, uint16_t, StringHash, StringEqual>;
     #elif defined(kUseMemPool)
-        using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, int, StringHash, StringEqual>::value_type>;
-        using Map = std::unordered_map<String, int, StringHash, StringEqual, CustomAllocatorPair>;
+        using CustomAllocatorPair = CustomAllocator<std::unordered_map<String, uint16_t, StringHash, StringEqual>::value_type>;
+        using Map = std::unordered_map<String, uint16_t, StringHash, StringEqual, CustomAllocatorPair>;
     #else
-        using Map = std::unordered_map<String, int, StringHash, StringEqual>;
+        using Map = std::unordered_map<String, uint16_t, StringHash, StringEqual>;
     #endif
 #else
     #if defined(kUsePMR)
-        using Map = std::pmr::map<String, int, StringLess>;
+        using Map = std::pmr::map<String, uint16_t, StringLess>;
     #elif defined(kUseMemPool)
-        using CustomAllocatorPair = CustomAllocator<std::map<String, int, StringLess>::value_type>;
-        using Map = std::map<String, int, StringLess, CustomAllocatorPair>;
+        using CustomAllocatorPair = CustomAllocator<std::map<String, uint16_t, StringLess>::value_type>;
+        using Map = std::map<String, uint16_t, StringLess, CustomAllocatorPair>;
     #else
-        using Map = std::map<String, int, StringLess>;
+        using Map = std::map<String, uint16_t, StringLess>;
     #endif
 #endif
 
