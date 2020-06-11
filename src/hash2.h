@@ -206,7 +206,7 @@ protected:
             }
         }
 
-        _aligned_free(oldBuffer);
+        free(oldBuffer);
     }
 
     //---------------------------------
