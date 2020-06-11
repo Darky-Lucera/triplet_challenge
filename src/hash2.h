@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <memory>
 #include <cstring>
+#include <cstdlib>
 
 //-------------------------------------
 struct String {
