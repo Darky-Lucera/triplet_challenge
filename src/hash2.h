@@ -33,7 +33,7 @@ public:
 
     //---------------------------------
     ~CustomHashMap() noexcept {
-        _aligned_free(mBuffer);
+        free(mBuffer);
     }
 
     //---------------------------------
@@ -183,7 +183,7 @@ protected:
 
     //---------------------------------
     void Allocate() noexcept {
-        mBuffer = reinterpret_cast<String *>(_aligned_malloc(mTotalNodes * sizeof(String), __alignof(String)));
+        mBuffer = reinterpret_cast<String *>(malloc(mTotalNodes * sizeof(String)));
 
         memset(mBuffer, 0, mTotalNodes * sizeof(String));
 
