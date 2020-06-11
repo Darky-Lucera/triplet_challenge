@@ -64,7 +64,7 @@ TimeDiff(time_point now, time_point past) {
 
 //-------------------------------------
 struct String {
-    static uint8_t *    buffer;
+    static inline uint8_t *    buffer {};
     union {
         uint64_t        lenHash;
         struct {
@@ -76,13 +76,12 @@ struct String {
 
     inline uint8_t *    word() const noexcept { return buffer + offset; }
 };
-uint8_t *    String::buffer {};
 
 //-------------------------------------
 struct StringLess {
     inline bool operator()(const String &a, const String &b) const {
-        uint64_t aLenHash = a.lenHash & 0xffffffffff;
-        uint64_t bLenHash = b.lenHash & 0xffffffffff;
+        uint64_t aLenHash = a.lenHash & 0xff'ffff'ffff;
+        uint64_t bLenHash = b.lenHash & 0xff'ffff'ffff;
 
         if (aLenHash < bLenHash)
             return true;
@@ -97,8 +96,8 @@ struct StringLess {
 //-------------------------------------
 struct StringEqual {
     inline bool operator()(const String &a, const String &b) const {
-        uint64_t aLenHash = a.lenHash & 0xffffffffff;
-        uint64_t bLenHash = b.lenHash & 0xffffffffff;
+        uint64_t aLenHash = a.lenHash & 0xff'ffff'ffff;
+        uint64_t bLenHash = b.lenHash & 0xff'ffff'ffff;
 
         if (aLenHash != bLenHash)
             return false;
@@ -181,17 +180,17 @@ fnvHash32(const uint8_t *str, size_t length) {
 
     //return hash;
 
-    uint32_t hash1 = str[length - 0] * fnvPrime;
-    uint32_t hash2 = str[length - 1] * fnvPrime;
-    uint32_t hash3 = str[length - 2] * fnvPrime;
-    uint32_t hash4 = str[length - 3] * fnvPrime;
+    uint32_t hash1 = str[length - 1] * fnvPrime;
+    uint32_t hash2 = str[length - 2] * fnvPrime;
+    uint32_t hash3 = str[length - 3] * fnvPrime;
+    uint32_t hash4 = str[length - 4] * fnvPrime;
     length -= 4;
 
     while (ptrdiff_t(length) > 3) {
-        hash1 ^= str[length - 0];
-        hash2 ^= str[length - 1];
-        hash3 ^= str[length - 2];
-        hash4 ^= str[length - 3];
+        hash1 ^= str[length - 1];
+        hash2 ^= str[length - 2];
+        hash3 ^= str[length - 3];
+        hash4 ^= str[length - 4];
         hash1 *= fnvPrime;
         hash2 *= fnvPrime;
         hash3 *= fnvPrime;
@@ -199,15 +198,15 @@ fnvHash32(const uint8_t *str, size_t length) {
         length -= 4;
     }
     if(length > 2) {
-        hash1 ^= str[length - 2];
+        hash1 ^= str[length - 3];
         hash1 *= fnvPrime;
     }
     if (length > 1) {
-        hash2 ^= str[length - 1];
+        hash2 ^= str[length - 2];
         hash2 *= fnvPrime;
     }
     if (length > 0) {
-        hash3 ^= str[length - 0];
+        hash3 ^= str[length - 1];
         hash3 *= fnvPrime;
     }
 
@@ -314,21 +313,6 @@ main(int argc, char *argv[]) {
 
     kTick(readTime);
 
-#if defined(kUsePMR)
-    std::pmr::monotonic_buffer_resource mbr;
-#elif defined(kUseMemPool)
-    CustomPool          pool(1024 * 1024 * 13);
-    CustomAllocatorPair ator(&pool);
-#endif
-
-#if defined(kUsePMR)
-    Map words(&mbr);
-#elif defined(kUseMemPool)
-    Map words(ator);
-#else
-    Map words;
-#endif
-
 #if defined(kUsePreProcess)
     size = PreprocessBuffer(buffer, size);
 #else
@@ -340,6 +324,21 @@ main(int argc, char *argv[]) {
 #endif
 
     kTick(preprocess);
+
+#if defined(kUsePMR)
+    std::pmr::monotonic_buffer_resource mbr;
+#elif defined(kUseMemPool)
+    CustomPool          pool(1024 * 1024 * 13);
+    CustomAllocatorPair ator(&pool);
+#endif
+
+#if defined(kUsePMR)
+    Map words(&mbr);
+#elif defined(kUseMemPool)
+    Map words(0x27000, ator);
+#else
+    Map words;
+#endif
 
     const uint8_t * const end = buffer + size;
     String      triplet { };            // 157858 triplets
