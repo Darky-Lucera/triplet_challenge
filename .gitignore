@@ -1,0 +1,11 @@
+.history
+.vscode
+vs
+vs2017
+vc
+vc2017
+build
+*.exe
+*.ilk
+*.pdb
+*.bak
