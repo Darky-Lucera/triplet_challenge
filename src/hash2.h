@@ -85,8 +85,12 @@ public:
             if (nodeHash == 0) {
                 if (++mNumNodes >= mResizeThreshold) {
                     Grow();
+                    pos = GetPosition(str.hash);
+                    mBuffer[pos] = str;
                 }
-                current = str;
+                else {
+                    current = str;
+                }
                 return;
             }
             else {
